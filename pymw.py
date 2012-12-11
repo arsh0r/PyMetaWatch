@@ -297,7 +297,9 @@ class MetaWatch:
         """Set the date and time of the watch to the system time."""
         ltime=time.localtime();
         #Year in BIG ENDIAN, not LITTLE.
-        str="\x07\xdb%s%s%s%s%s%s\x01\x01" % (
+        str="%s%s%s%s%s%s%s%s\x01\x01" % (
+	    chr(ltime.tm_year / 256),
+	    chr(ltime.tm_year % 256),
             chr(ltime.tm_mon),  #month
             chr(ltime.tm_mday), #day of month
             chr((ltime.tm_wday+1) % 7), #day of week
@@ -313,15 +315,15 @@ class MetaWatch:
         data=self.tx("\x27\x00");
         date=data[2:]
         #print "Interpreting %s" % hex(date);
-        year=ord(date[1])*256+ord(date[0])
+        year=ord(date[0])*256+ord(date[1])
         month=ord(date[2]);
         day=ord(date[3]);
         dayofweek=ord(date[4]);
         hour=ord(date[5]);
         minute=ord(date[6]);
         second=ord(date[6]);
-        print "%02i:%02i on %02i.%02i.%04i" % (
-                hour, minute,
+        print "%02i:%02i:%02i on %02i.%02i.%04i" % (
+                hour, minute, second,
                 day, month, year);
 
 
@@ -440,7 +442,6 @@ def main():
 
 
     mw.getBatteryVoltage()
-
 
 
     #mw.getButtonConfiguration(mode,0)
