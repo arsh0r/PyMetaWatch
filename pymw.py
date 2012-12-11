@@ -94,7 +94,8 @@ class MetaWatch:
         tmp = msg
         while len(tmp):
             tmp = tmp[self.sock.send(tmp, socket.MSG_WAITALL):]
-            print len(tmp), "left to send"
+            if self.verbose:
+                print len(tmp), "left to send"
         #result = self.sock.sendall(msg, socket.MSG_WAITALL);
         self._last_txt_time = time.clock()
 
@@ -170,7 +171,8 @@ class MetaWatch:
                     #byte=((byte<<1)+pixel);
                     byte=((byte>>1)|(pixel<<7));
                 rowdat="%s%s" % (rowdat,chr(byte));
-            print rowstr;
+            if self.verbose:
+                print rowstr;
             self.writebuffer(mode,
                             y, rowdat)#,
                             #0,rowdat);
@@ -442,7 +444,7 @@ def main():
 
 
     mw.getBatteryVoltage()
-
+    mw.getclock()
 
     #mw.getButtonConfiguration(mode,0)
 
