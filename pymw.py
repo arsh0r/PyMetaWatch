@@ -7,11 +7,7 @@
 
 import sys, time;
 
-try:
-    import bluetooth
-except ImportError:
-    bluetooth = None
-    import lightblue
+import bluetooth
 import socket
 
 MODE_IDLE = 0
@@ -45,29 +41,22 @@ class MetaWatch:
         self.verbose = verbose
 
         while watchaddr == None or watchaddr == "none":
-            print "performing inquiry..."
-            if bluetooth:
-                nearby_devices = bluetooth.discover_devices(lookup_names = True)
-            else:
-                # Need to strip the third "device class" tuple element from results
-                nearby_devices = map(lambda x:x[:2], lightblue.finddevices())
+            print("performing inquiry...")
+            nearby_devices = bluetooth.discover_devices(lookup_names = True)
 
-            print "found %d devices" % len(nearby_devices)
+            print("found %d devices" % len(nearby_devices))
             for addr, name in nearby_devices:
-                print "  %s - '%s'" % (addr, name)
+                print("  %s - '%s'" % (addr, name))
                 if name and ('MetaWatch Digital' in name or 'Fossil Digital' in name) :
                     watchaddr=addr;
-                    print "Identified Watch at %s" % watchaddr;
+                    print("Identified Watch at %s" % watchaddr);
 
         # MetaWatch doesn't run the Service Discovery Protocol.
         # Instead we manually use the portnumber.
         port=1;
 
-        print "Connecting to %s on port %i." % (watchaddr, port);
-        if bluetooth:
-            sock=bluetooth.BluetoothSocket(bluetooth.RFCOMM);
-        else:
-            sock=lightblue.socket();
+        print("Connecting to %s on port %i." % (watchaddr, port));
+        sock=bluetooth.BluetoothSocket(bluetooth.RFCOMM);
         sock.setblocking(True)
 
         self.sock = sock;
@@ -75,7 +64,7 @@ class MetaWatch:
         sock.settimeout(10);            # IMPORTANT Must be patient, must come after connect().
         self.setclock()
         #Buzz to indicate connection.
-        self.buzz();
+        #self.buzz();
 
     def close(self):
         """Close the connection."""
@@ -88,19 +77,17 @@ class MetaWatch:
         #Prepend SFD, length.
         msg="\x01"+chr(len(msg)+4)+msg;
         #Append CRC.
-        crc=self.CRC.checksum(msg);
+        crc=self.CRC.checksum(msg.encode('latin-1'));
         msg=msg+chr(crc&0xFF)+chr(crc>>8); #Little Endian
 
-        tmp = msg
+        tmp = msg.encode('latin-1')
         while len(tmp):
             tmp = tmp[self.sock.send(tmp, socket.MSG_WAITALL):]
-            if self.verbose:
-                print len(tmp), "left to send"
-        #result = self.sock.sendall(msg, socket.MSG_WAITALL);
+            #print len(tmp), "left to send"
         self._last_txt_time = time.clock()
 
         if self.verbose:
-            print "Sent message: %s" % hex(msg);
+            print("Sent message: %s" % hex(msg.encode('latin-1')));
 
         if not rx:
             return None;
@@ -113,7 +100,7 @@ class MetaWatch:
             data=self.sock.recv(32);
             data=data[2:];
         except IOError:pass;
-        if self.verbose: print "Received [%s]" % hex(data);
+        if self.verbose: print("Received [%s]" % hex(data));
         return data;
 
     def writebuffer(self, mode, row1, data1, row2=None, data2=None):
@@ -147,16 +134,18 @@ class MetaWatch:
         # Blank some rows.
         for foo in range(0,96):
             self.writebuffer(m,
-                            foo, image[(foo/8)%2]
+                            foo, image[(int(foo/8))%2]
                             #);
-                            ,foo+40, image[((foo+40)/8)%2]);
+                            ,foo+40, image[(int((foo+40)/8))%2]);
             #self.updatedisplay(mode=m);
         self.updatedisplay(mode=m);
 
-    def writeimage(self, mode=0, image="template.bmp", live=False):
+    def writeimage(self, mode=0, image="template.bmp", live=False, im=None):
         """Write a 1bpp BMP file to the watch in the given mode."""
-        import Image;
-        im=Image.open(image);
+        from PIL import Image;
+        if im == None:        
+            im=Image.open(image);
+        
         pix=im.load();
         for y in range(0,96):
             rowstr="";
@@ -171,8 +160,7 @@ class MetaWatch:
                     #byte=((byte<<1)+pixel);
                     byte=((byte>>1)|(pixel<<7));
                 rowdat="%s%s" % (rowdat,chr(byte));
-            if self.verbose:
-                print rowstr;
+            #print rowstr;
             self.writebuffer(mode,
                             y, rowdat)#,
                             #0,rowdat);
@@ -182,16 +170,16 @@ class MetaWatch:
 
 
     def writeText(self,mode=0,text=''):
-        import Image,ImageDraw,ImageFont
+        from PIL import Image,ImageDraw,ImageFont
 
         image = Image.new("1",(96,96))
-        self.draw_word_wrap(image,text,1,1)
-        image.save('tmp.bmp','BMP')
-        self.writeimage(mode,"tmp.bmp",live=True)
+        self.draw_word_wrap(image,text,1,31)
+        self.writeimage(mode,"tmp.bmp",live=False, im=image)
 
     def draw_word_wrap(self,img, text, xpos=0, ypos=0, max_width=95):
-        import Image,ImageDraw,ImageFont
+        from PIL import Image,ImageDraw,ImageFont
         font=ImageFont.load_default()
+        font=ImageFont.truetype("mw8_5.ttf", 8)
 
         # textwrapping adapted from http://jesselegg.com/archives/2009/09/5/simple-word-wrap-algorithm-pythons-pil/
 
@@ -217,7 +205,7 @@ class MetaWatch:
             remaining = remaining - (word_width + space_width)
         for text in output_text:
             draw.text((xpos, ypos), text, font=font, fill='white')
-            ypos += text_size_y
+            ypos += text_size_y+1
 
 
 
@@ -241,10 +229,10 @@ class MetaWatch:
             return
 
         cmd = data[0]
-        if cmd == "\x34":
+        if cmd == 0x34:
             # we received a button press
             buttonIndex = data[1]
-            print "button [%i] pressed" % ord(buttonIndex);
+            print("button [%i] pressed" % buttonIndex);
 
     def buzz(self, ms_on=500, ms_off=500, cycles=1):
         """Buzz the buzzer."""
@@ -277,20 +265,20 @@ class MetaWatch:
     def gettype(self):
         """Get the version information."""
         devtyperesp=self.tx("\x01\x00");
-        devtype=ord(devtyperesp[2]);
+        devtype=devtyperesp[2];
         types=["Reserved",
                 "Ana-Digi", "Digital",
                 "DigitalDev", "AnaDigitalDev"];
         self.devtype=types[devtype];
-        print "Identified %s MetaWatch" % self.devtype;
+        print("Identified %s MetaWatch" % self.devtype);
 
     def getinfostr(self,item=0x00):
         """Get the information string."""
         string=self.tx("\x03\x00%s" % chr(item));
         return string[:len(string)-2];  #Don't include the checksum.
 
-        def getinfo(self):
-            """Get all the information strings.""";
+    def getinfo(self):
+        """Get all the information strings.""";
         model=self.getinfostr(0);
         version=self.getinfostr(1);
         return "%s %s" % (model,version);
@@ -300,8 +288,8 @@ class MetaWatch:
         ltime=time.localtime();
         #Year in BIG ENDIAN, not LITTLE.
         str="%s%s%s%s%s%s%s%s\x01\x01" % (
-	    chr(ltime.tm_year / 256),
-	    chr(ltime.tm_year % 256),
+            chr(ltime.tm_year >> 8),  #year
+            chr(ltime.tm_year & 0xff),  #year
             chr(ltime.tm_mon),  #month
             chr(ltime.tm_mday), #day of month
             chr((ltime.tm_wday+1) % 7), #day of week
@@ -313,21 +301,21 @@ class MetaWatch:
 
     def getclock(self):
         """Get the local time from the watch, in order to set it or measure drift."""
-        #Year in LITTLE ENDIAN, not BIG.
+        ltime=time.localtime();
+        #Year in BIG ENDIAN, not LITTLE.
         data=self.tx("\x27\x00");
         date=data[2:]
         #print "Interpreting %s" % hex(date);
-        year=ord(date[0])*256+ord(date[1])
-        month=ord(date[2]);
-        day=ord(date[3]);
-        dayofweek=ord(date[4]);
-        hour=ord(date[5]);
-        minute=ord(date[6]);
-        second=ord(date[6]);
-        print "%02i:%02i:%02i on %02i.%02i.%04i" % (
+        year=date[0]*256+date[1]
+        month=date[2];
+        day=date[3];
+        dayofweek=date[4];
+        hour=date[5];
+        minute=date[6];
+        second=date[7];
+        print("%02i:%02i:%02i on %02i.%02i.%04i" % (
                 hour, minute, second,
-                day, month, year);
-
+                day, month, year));
 
     def configureWatchMode(self,mode=0, save=0, displayTimeout=0, invertDisplay=True):
         msg=[]
@@ -367,15 +355,15 @@ class MetaWatch:
 
         data = self.tx(''.join(msg))
 
-        print "button:%i %s" %(buttonIndex, data)
+        print("button:%i %s" %(buttonIndex, data))
 
     def getBatteryVoltage(self):
         str="\x56\x00"
         data=self.tx(str)
-        volt=ord(data[1])*256+ord(data[0])
-        chargerAttached=ord(data[2])
-        isCharging=ord(data[3])
-        print "battery:%s charger:%s isCharging:%s" %(volt,chargerAttached,isCharging)
+        volt=data[1]*256+data[0]
+        chargerAttached=data[2]
+        isCharging=data[3]
+        print("battery:%s charger:%s isCharging:%s" %(volt,chargerAttached,isCharging))
 
     def setDisplayInverted(self, inverted=True):
         str=""
@@ -392,10 +380,10 @@ class CRC_CCITT:
     def __init__(self, inverted=True):
         self.inverted=inverted;
         self.tab=256*[[]]
-        for i in xrange(256):
+        for i in range(256):
             crc=0
             c = i << 8
-            for j in xrange(8):
+            for j in range(8):
                 if (crc ^ c) & 0x8000:
                     crc = ( crc << 1) ^ 0x1021
                 else:
@@ -416,7 +404,7 @@ class CRC_CCITT:
         #crcval=0;
         crcval=0xFFFF;
         for c in str:
-            crcval=self.update_crc(crcval, ord(c));
+            crcval=self.update_crc(crcval, c);
         return crcval;
 
     def flip(self,c):
@@ -431,27 +419,29 @@ def hex(str):
     """Returns the hex decoded version of a byte string."""
     toret="";
     if str==None: return "none";
+    str = str
     for c in str:
-        toret="%s %02x" % (toret,ord(c));
+        toret="%s %02X" % (toret,c);
     return toret;
 
 def main():
     watchaddr=None;
     if len(sys.argv)>1: watchaddr=sys.argv[1];
-    mw=MetaWatch(watchaddr);
+    mw=MetaWatch(watchaddr,verbose=False);
 
     mode=MODE_IDLE;
 
 
     mw.getBatteryVoltage()
-    mw.getclock()
+
+
 
     #mw.getButtonConfiguration(mode,0)
 
     #mw.configureWatchMode(mode=mode, displayTimeout=20, invertDisplay=False)
 
     # First, clear the draw buffer to a filled template.
-    mw.clearbuffer(mode=mode,filled=False);
+    #mw.clearbuffer(mode=mode,filled=True);
 
     imgfile="test.bmp";
     if len(sys.argv)>2:
@@ -462,37 +452,57 @@ def main():
 
     #Push an image into the buffer.
     try:
-        mw.writeimage(mode=mode,image=imgfile,live=False);
-        time.sleep(0.1)
+        #mw.writeimage(mode=mode,image=imgfile,live=False);
+        #mw.writeText(mode,"Hello World  Hello World again and again and again and again and again and again...")
+        #time.sleep(0.1)
+        #mw.writeText(mode,"Hello World  Hello World again and again and again and again and again and again...")
+        #time.sleep(0.1)
         #mw.testwritebuffer()
+        mw.writeText(mode,"Dies ist ein Test 3")
+        time.sleep(1)
+        mw.writeText(mode,"Dies ist ein Test 2")
+        time.sleep(1)
+        mw.writeText(mode,"Dies ist ein Test 1")
+        time.sleep(1)
+        mw.writeimage(mode=mode,image=imgfile,live=False);
+
     except ImportError:
-        print "Error, Python Imaging Library (PIL) needs to be installed"
+        print("Error, Python Imaging Library (PIL) needs to be installed")
     except:
-        print "Error loading image.  Probably not in the working directory.";
+        print("Error loading image.  Probably not in the working directory.");
 
+    #mw.enableButton(mode,BUTTON_A, BUTTON_TYPE_IMMEDIATE)
+    #mw.enableButton(mode,BUTTON_B, BUTTON_TYPE_IMMEDIATE)
+    #mw.enableButton(mode,BUTTON_C, BUTTON_TYPE_IMMEDIATE)
+    #mw.enableButton(mode,BUTTON_D, BUTTON_TYPE_IMMEDIATE)
+    #mw.enableButton(mode,BUTTON_E, BUTTON_TYPE_IMMEDIATE)
+    #mw.enableButton(mode,BUTTON_F, BUTTON_TYPE_IMMEDIATE)
 
-    mw.enableButton(mode,BUTTON_A, BUTTON_TYPE_IMMEDIATE)
-    mw.enableButton(mode,BUTTON_B, BUTTON_TYPE_IMMEDIATE)
-    mw.enableButton(mode,BUTTON_C, BUTTON_TYPE_IMMEDIATE)
-    mw.enableButton(mode,BUTTON_D, BUTTON_TYPE_IMMEDIATE)
-    mw.enableButton(mode,BUTTON_E, BUTTON_TYPE_IMMEDIATE)
-    mw.enableButton(mode,BUTTON_F, BUTTON_TYPE_IMMEDIATE)
+    #mw.disableButton(mode,BUTTON_A, BUTTON_TYPE_PRESSANDRELEASE)
+    #mw.disableButton(mode,BUTTON_B, BUTTON_TYPE_PRESSANDRELEASE)
+    #mw.disableButton(mode,BUTTON_C, BUTTON_TYPE_PRESSANDRELEASE)
 
-    mw.disableButton(mode,BUTTON_A, BUTTON_TYPE_PRESSANDRELEASE)
-    mw.disableButton(mode,BUTTON_B, BUTTON_TYPE_PRESSANDRELEASE)
-    mw.disableButton(mode,BUTTON_C, BUTTON_TYPE_PRESSANDRELEASE)
-
-#mode=0
-# mw.configureWatchMode(mode=mode, displayTimeout=100, invertDisplay=False)
-    try:
-        while True:
-            mw.idle()
-    except KeyboardInterrupt:
-
-        mode=0
-        mw.updatedisplay(mode)
-        pass
-
+    #mode=0
+    #mw.configureWatchMode(mode=mode, displayTimeout=100, invertDisplay=False)
+    #try:
+    #    while True:
+    #        mw.idle()
+    #except KeyboardInterrupt:
+    #    pass
+    #    mode=0
+    #    mw.updatedisplay(mode)
+    #    pass
+    #mw.idle()
+    #mw.setclock()
+    #time.sleep(3)
+    mw.getclock()
+    mw.gettype()
+    #time.sleep(3)
+    #mw.getclock()
+    #time.sleep(3)
+    #mw.getclock()
+    #time.sleep(1)
+    mw.updatedisplay(0)
 
     mw.close();
 

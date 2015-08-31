@@ -1,3 +1,3 @@
 run:
-	python pymw.py D0:37:61:C3:A1:7B dalek.bmp
+	python3 pymw.py D0:37:61:C4:9C:94 pfadi.png
 
